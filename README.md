@@ -8,7 +8,7 @@ A docker image to run the Interactive Brokers Gateway Application without any hu
 
 It includes:
 
-- [IB Gateway Application](https://www.interactivebrokers.com/en/index.php?f=16457) ([stable](https://www.interactivebrokers.com/en/trading/ibgateway-stable.php)
+- [IB Gateway Application](https://www.interactivebrokers.com/en/index.php?f=16457) ([stable] https://www.interactivebrokers.com/en/trading/ibgateway-stable.php)
 - [IBC Application](https://github.com/IbcAlpha/IBC) -
 to control the IB Gateway Application (simulates user input).
 - [Xvfb](https://www.x.org/releases/X11R7.6/doc/man/man1/Xvfb.1.xhtml) -
@@ -27,7 +27,7 @@ version: "3.4"
 
 services:
   ib-gateway:
-    image: ghcr.io/unusualalpha/ib-gateway:latest
+    image: ghcr.io/sucsessyan/ib-gateway:latest
     restart: always
     environment:
       TWS_USERID: ${TWS_USERID}
