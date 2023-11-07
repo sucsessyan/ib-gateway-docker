@@ -14,6 +14,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - run: cd stable
+    - run: cd stable/
+    - run: ls -l
     - name: Build the Docker image
       run: docker build . --file Dockerfile --tag ib-gateway:$(date +%s)
