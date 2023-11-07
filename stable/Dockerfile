@@ -2,20 +2,20 @@
 #
 # Setup Stage: install apps
 #
-# This is a dedicated stage so that donwload archives don't end up on 
+# This is a dedicated stage so that donwload archives don't end up on
 # production image and consume unnecessary space.
 #
 
 FROM ubuntu:22.04 as setup
 
-ENV IB_GATEWAY_VERSION=10.19.1j
+ENV IB_GATEWAY_VERSION=stable
 ENV IB_GATEWAY_RELEASE_CHANNEL=stable
-ENV IBC_VERSION=3.15.2
+ENV IBC_VERSION=3.18.0
 
 # Prepare system
 RUN apt-get update -y
 RUN apt-get install --no-install-recommends --yes \
-  curl \
+  wget \
   ca-certificates \
   unzip
 
@@ -23,21 +23,18 @@ WORKDIR /tmp/setup
 
 # Install IB Gateway
 # Use this instead of "RUN curl .." to install a local file:
-#COPY ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh .
-RUN curl -sSL https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh \
-  --output ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh
-RUN curl -sSL https://github.com/UnusualAlpha/ib-gateway-docker/releases/download/ibgateway-${IB_GATEWAY_RELEASE_CHANNEL}%40${IB_GATEWAY_VERSION}/ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256 \
-  --output ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256
-RUN sha256sum --check ./ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh.sha256
-RUN chmod a+x ./ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh
-RUN ./ibgateway-${IB_GATEWAY_VERSION}-standalone-linux-x64.sh -q -dir /root/Jts/ibgateway/${IB_GATEWAY_VERSION}
+#COPY ibgateway-standalone-linux-x64.sh .
+RUN wget https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh
+RUN ls -l
+RUN chmod a+x ./ibgateway-stable-standalone-linux-x64.sh
+RUN ./ibgateway-stable-standalone-linux-x64.sh -q -dir /root/Jts/ibgateway/stable
 COPY ./config/ibgateway/jts.ini /root/Jts/jts.ini
 
 # Install IBC
-RUN curl -sSL https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip --output IBCLinux-${IBC_VERSION}.zip
+RUN wget https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}-Update.1/IBCLinux-${IBC_VERSION}.zip
 RUN mkdir /root/ibc
 RUN unzip ./IBCLinux-${IBC_VERSION}.zip -d /root/ibc
-RUN chmod -R u+x /root/ibc/*.sh 
+RUN chmod -R u+x /root/ibc/*.sh
 RUN chmod -R u+x /root/ibc/scripts/*.sh
 COPY ./config/ibc/config.ini.tmpl /root/ibc/config.ini.tmpl
 
@@ -50,7 +47,7 @@ COPY ./scripts /root/scripts
 
 FROM ubuntu:22.04
 
-ENV IB_GATEWAY_VERSION=10.19.1j
+ENV IB_GATEWAY_VERSION=stable
 
 WORKDIR /root
 
