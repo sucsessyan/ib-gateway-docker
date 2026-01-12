@@ -6,11 +6,11 @@
 # production image and consume unnecessary space.
 #
 
-FROM ubuntu:22.04 as setup
+FROM ubuntu:24.10 as builder
 
 ENV IB_GATEWAY_VERSION=stable
 ENV IB_GATEWAY_RELEASE_CHANNEL=stable
-ENV IBC_VERSION=3.18.0
+ENV IBC_VERSION=3.23.0
 
 # Prepare system
 RUN apt-get update -y
@@ -31,7 +31,7 @@ RUN ./ibgateway-stable-standalone-linux-x64.sh -q -dir /root/Jts/ibgateway/stabl
 COPY ./config/ibgateway/jts.ini /root/Jts/jts.ini
 
 # Install IBC
-RUN wget https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}-Update.1/IBCLinux-${IBC_VERSION}.zip
+RUN wget https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip
 RUN mkdir /root/ibc
 RUN unzip ./IBCLinux-${IBC_VERSION}.zip -d /root/ibc
 RUN chmod -R u+x /root/ibc/*.sh
@@ -45,7 +45,7 @@ COPY ./scripts /root/scripts
 # Build Stage: build production image
 #
 
-FROM ubuntu:22.04
+FROM ubuntu:24.10
 
 ENV IB_GATEWAY_VERSION=stable
 
@@ -65,9 +65,9 @@ RUN apt-get install --no-install-recommends --yes \
   x11vnc
 
 # Copy files
-COPY --from=setup /root/ .
+COPY --from=builder /root/ .
 RUN chmod a+x /root/scripts/*.sh
-COPY --from=setup /usr/local/i4j_jres/ /usr/local/i4j_jres
+COPY --from=builder /usr/local/i4j_jres/ /usr/local/i4j_jres
 
 # IBC env vars
 ENV TWS_MAJOR_VRSN ${IB_GATEWAY_VERSION}
