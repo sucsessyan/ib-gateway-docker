@@ -13,10 +13,7 @@ ENV IBC_VERSION=3.23.0
 
 # Prepare system
 RUN apt-get update -y
-RUN apt-get install --no-install-recommends --yes 
-  wget 
-  ca-certificates 
-  unzip
+RUN apt-get install --no-install-recommends --yes wget ca-certificates unzip
 
 WORKDIR /tmp/setup
 
