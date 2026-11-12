@@ -29,6 +29,7 @@ defaults:
 
 jobs:
   detect-release:
+    if: ${{ github.event_name != 'workflow_dispatch' || matrix.channel == inputs.channel }}
     runs-on: ubuntu-latest
 
     strategy:
@@ -37,23 +38,30 @@ jobs:
         channel: ["stable", "latest"]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: master
 
-      - name: Skip channel
-        if: ${{ github.event_name == 'workflow_dispatch' && matrix.channel != inputs.channel }}
-        run: exit 0
-
       - name: Get Version
         id: version
+        env:
+          CHANNEL: ${{ matrix.channel }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            build_version="${{ inputs.version }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            build_version="$INPUT_VERSION"
           else
-            res=$(curl -fsSL "https://download2.interactivebrokers.com/installers/tws/${{ matrix.channel }}-standalone/version.json" \
-              | sed 's/tws${{ matrix.channel }}_callback(//g;s/);//g')
+            res=$(curl -fsSL \
+              "https://download2.interactivebrokers.com/installers/tws/${CHANNEL}-standalone/version.json" \
+              | sed "s/tws${CHANNEL}_callback(//g;s/);//g")
+
             build_version=$(jq -r '.buildVersion' <<< "$res")
+          fi
+
+          if [ -z "$build_version" ] || [ "$build_version" = "null" ]; then
+            echo "Unable to determine IB Gateway version"
+            exit 1
           fi
 
           echo "build_version=$build_version" >> "$GITHUB_OUTPUT"
@@ -62,8 +70,10 @@ jobs:
         id: check-release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANNEL: ${{ matrix.channel }}
+          VERSION: ${{ steps.version.outputs.build_version }}
         run: |
-          release_tag="ibgateway-${{ matrix.channel }}@${{ steps.version.outputs.build_version }}"
+          release_tag="ibgateway-${CHANNEL}@${VERSION}"
 
           if gh release view "$release_tag" >/dev/null 2>&1; then
             echo "release_exists=true" >> "$GITHUB_OUTPUT"
@@ -73,9 +83,12 @@ jobs:
 
       - name: Download IB Gateway installer
         if: ${{ github.event_name == 'schedule' && steps.check-release.outputs.release_exists == 'false' }}
+        env:
+          CHANNEL: ${{ matrix.channel }}
+          VERSION: ${{ steps.version.outputs.build_version }}
         run: |
-          download_url="https://download2.interactivebrokers.com/installers/ibgateway/${{ matrix.channel }}-standalone/ibgateway-${{ matrix.channel }}-standalone-linux-x64.sh"
-          dest="ibgateway-${{ steps.version.outputs.build_version }}-standalone-linux-x64.sh"
+          download_url="https://download2.interactivebrokers.com/installers/ibgateway/${CHANNEL}-standalone/ibgateway-${CHANNEL}-standalone-linux-x64.sh"
+          dest="ibgateway-${VERSION}-standalone-linux-x64.sh"
 
           curl -fsSL "$download_url" --output "$dest"
           sha256sum "$dest" > "${dest}.sha256"
@@ -84,51 +97,81 @@ jobs:
         if: ${{ github.event_name == 'schedule' && steps.check-release.outputs.release_exists == 'false' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANNEL: ${{ matrix.channel }}
+          VERSION: ${{ steps.version.outputs.build_version }}
         run: |
-          gh release create 'ibgateway-${{ matrix.channel }}@${{ steps.version.outputs.build_version }}' \
-            -t 'IB Gateway ${{ matrix.channel }} ${{ steps.version.outputs.build_version }}' \
-            -n 'IB Gateway ${{ matrix.channel }} ${{ steps.version.outputs.build_version }} release files' \
-            ibgateway-*.sh ibgateway-*.sha256
+          release_tag="ibgateway-${CHANNEL}@${VERSION}"
+          installer="ibgateway-${VERSION}-standalone-linux-x64.sh"
+
+          gh release create "$release_tag" \
+            -t "IB Gateway ${CHANNEL} ${VERSION}" \
+            -n "IB Gateway ${CHANNEL} ${VERSION} release files" \
+            "$installer" "${installer}.sha256"
 
       - name: Verify Release exists
         if: ${{ github.event_name == 'workflow_dispatch' && steps.check-release.outputs.release_exists == 'false' }}
+        env:
+          CHANNEL: ${{ matrix.channel }}
+          VERSION: ${{ steps.version.outputs.build_version }}
         run: |
-          echo "Release ibgateway-${{ matrix.channel }}@${{ steps.version.outputs.build_version }} does not exist."
+          echo "Release ibgateway-${CHANNEL}@${VERSION} does not exist."
           echo "Manual build requires an existing GitHub Release with the installer."
           exit 1
 
       - name: Update Dockerfile
-        run: ./update.sh ${{ matrix.channel }} ${{ steps.version.outputs.build_version }}
+        env:
+          CHANNEL: ${{ matrix.channel }}
+          VERSION: ${{ steps.version.outputs.build_version }}
+        run: |
+          ./update.sh "$CHANNEL" "$VERSION"
+
+      - name: Check Dockerfile changes
+        id: changes
+        env:
+          CHANNEL: ${{ matrix.channel }}
+        run: |
+          if git diff --quiet -- "$CHANNEL"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Login to GHCR
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.channel }}
+          context: ./${{ matrix.channel }}
+          file: ./${{ matrix.channel }}/Dockerfile
           push: true
           tags: |
             ghcr.io/sucsessyan/ib-gateway:${{ steps.version.outputs.build_version }}-${{ matrix.channel }}
             ghcr.io/sucsessyan/ib-gateway:${{ matrix.channel }}
 
       - name: Create PR
-        if: ${{ github.event_name == 'schedule' && steps.check-release.outputs.release_exists == 'false' }}
+        if: ${{ github.event_name == 'schedule' && steps.changes.outputs.changed == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANNEL: ${{ matrix.channel }}
+          VERSION: ${{ steps.version.outputs.build_version }}
         run: |
-          t_branch="update-${{ matrix.channel }}-to-${{ steps.version.outputs.build_version }}"
+          t_branch="update-${CHANNEL}-to-${VERSION}"
 
           git config user.name github-actions
           git config user.email github-actions@github.com
 
           git checkout -b "$t_branch"
-          git add "${{ matrix.channel }}"
-          git commit -m "Update ${{ matrix.channel }} to ${{ steps.version.outputs.build_version }}"
+          git add "$CHANNEL"
+          git commit -m "Update ${CHANNEL} to ${VERSION}"
           git push --set-upstream origin "$t_branch"
 
-          gh pr create --base master --fill
+          gh pr create \
+            --base master \
+            --head "$t_branch" \
+            --title "Update ${CHANNEL} to ${VERSION}" \
+            --body "Automated IB Gateway ${CHANNEL} update to version ${VERSION}."
