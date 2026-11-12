@@ -2,7 +2,7 @@
 # Setup Stage: install apps
 #
 
-FROM ubuntu:24.10 AS builder
+FROM ubuntu:24.04 AS builder
 
 ARG VERSION
 ARG CHANNEL
@@ -44,7 +44,7 @@ COPY ./scripts /root/scripts
 # Build Stage: production image
 #
 
-FROM ubuntu:24.10
+FROM ubuntu:24.04
 
 ARG VERSION
 ARG CHANNEL
