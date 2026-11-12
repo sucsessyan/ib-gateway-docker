@@ -12,25 +12,27 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Get build arguments
-        id: build-args
+      - name: Get stable version
+        id: version
         run: |
-          VERSION=$(sed -n 's/^ARG VERSION=//p' stable/Dockerfile | head -n 1)
-          CHANNEL=$(sed -n 's/^ARG CHANNEL=//p' stable/Dockerfile | head -n 1)
+          VERSION=$(git tag --list 'ibgateway-stable@*' --sort=-version:refname | head -n 1)
+          VERSION=${VERSION#ibgateway-stable@}
 
-          if [ -z "$VERSION" ] || [ -z "$CHANNEL" ]; then
-            echo "Unable to determine VERSION and CHANNEL from stable/Dockerfile"
+          if [ -z "$VERSION" ]; then
+            echo "No stable IB Gateway release tag found"
             exit 1
           fi
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "Stable version: $VERSION"
 
       - name: Build the Docker image
         run: |
           docker build ./stable \
             --file ./stable/Dockerfile \
-            --build-arg VERSION="${{ steps.build-args.outputs.version }}" \
-            --build-arg CHANNEL="${{ steps.build-args.outputs.channel }}" \
+            --build-arg VERSION="${{ steps.version.outputs.version }}" \
+            --build-arg CHANNEL=stable \
             --tag ib-gateway:$(date +%s)
