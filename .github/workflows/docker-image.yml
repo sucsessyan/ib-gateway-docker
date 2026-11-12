@@ -13,8 +13,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Get build arguments
+        id: build-args
+        run: |
+          VERSION=$(sed -n 's/^ARG VERSION=//p' stable/Dockerfile | head -n 1)
+          CHANNEL=$(sed -n 's/^ARG CHANNEL=//p' stable/Dockerfile | head -n 1)
+
+          if [ -z "$VERSION" ] || [ -z "$CHANNEL" ]; then
+            echo "Unable to determine VERSION and CHANNEL from stable/Dockerfile"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+
       - name: Build the Docker image
         run: |
           docker build ./stable \
             --file ./stable/Dockerfile \
+            --build-arg VERSION="${{ steps.build-args.outputs.version }}" \
+            --build-arg CHANNEL="${{ steps.build-args.outputs.channel }}" \
             --tag ib-gateway:$(date +%s)
