@@ -13,21 +13,23 @@ ENV IBC_VERSION=3.23.0
 
 # Prepare system
 RUN apt-get update -y
-RUN apt-get install --no-install-recommends --yes \
-  wget \
-  ca-certificates \
+RUN apt-get install --no-install-recommends --yes 
+  wget 
+  ca-certificates 
   unzip
 
 WORKDIR /tmp/setup
 
 # Install IB Gateway
-RUN wget -O ibgateway-installer.sh \
+RUN wget -O ibgateway-installer.sh 
   "https://github.com/sucsessyan/ib-gateway-docker/releases/download/ibgateway-${CHANNEL}%40${VERSION}/ibgateway-${VERSION}-standalone-linux-x64.sh"
 
 RUN chmod a+x ./ibgateway-installer.sh
 RUN ./ibgateway-installer.sh -q -dir /root/Jts/ibgateway/${VERSION}
 
-COPY ./config/ibgateway/jts.ini /root/Jts/jts.ini
+# Verify Java Runtime
+RUN test -x "/root/Jts/ibgateway/${VERSION}/jre/bin/java" 
+  || (echo "IB Gateway Java runtime not found" && exit 1)
 
 # Install IBC
 RUN wget https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip
@@ -56,20 +58,19 @@ WORKDIR /root
 
 # Prepare system
 RUN apt-get update -y
-RUN apt-get install --no-install-recommends --yes \
-  gettext \
-  xvfb \
-  libxslt-dev \
-  libxrender1 \
-  libxtst6 \
-  libxi6 \
-  libgtk2.0-bin \
-  socat \
+RUN apt-get install --no-install-recommends --yes 
+  gettext 
+  xvfb 
+  libxslt-dev 
+  libxrender1 
+  libxtst6 
+  libxi6 
+  libgtk2.0-bin 
+  socat 
   x11vnc
 
 # Copy files
 COPY --from=builder /root/ .
-COPY --from=builder /root/.local/share/i4j_jres/ /usr/local/i4j_jres/
 
 RUN chmod a+x /root/scripts/*.sh
 
