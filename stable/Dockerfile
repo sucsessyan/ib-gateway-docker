@@ -54,6 +54,8 @@ ENV IB_GATEWAY_RELEASE_CHANNEL=${CHANNEL}
 
 WORKDIR /root
 
+COPY --from=builder /root/.local/share/i4j_jres/ /usr/local/i4j_jres/
+
 # Prepare system
 RUN apt-get update -y
 RUN apt-get install --no-install-recommends --yes \
