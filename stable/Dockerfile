@@ -54,8 +54,6 @@ ENV IB_GATEWAY_RELEASE_CHANNEL=${CHANNEL}
 
 WORKDIR /root
 
-COPY --from=builder /root/.local/share/i4j_jres/ /usr/local/i4j_jres/
-
 # Prepare system
 RUN apt-get update -y
 RUN apt-get install --no-install-recommends --yes \
@@ -71,8 +69,9 @@ RUN apt-get install --no-install-recommends --yes \
 
 # Copy files
 COPY --from=builder /root/ .
+COPY --from=builder /root/.local/share/i4j_jres/ /usr/local/i4j_jres/
+
 RUN chmod a+x /root/scripts/*.sh
-COPY --from=builder /usr/local/i4j_jres/ /usr/local/i4j_jres
 
 # IBC env vars
 ENV TWS_MAJOR_VRSN=${VERSION}
