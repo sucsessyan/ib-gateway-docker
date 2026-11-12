@@ -1,15 +1,14 @@
-
 #
 # Setup Stage: install apps
 #
-# This is a dedicated stage so that donwload archives don't end up on
-# production image and consume unnecessary space.
-#
 
-FROM ubuntu:24.10 as builder
+FROM ubuntu:24.10 AS builder
 
-ENV IB_GATEWAY_VERSION=stable
-ENV IB_GATEWAY_RELEASE_CHANNEL=stable
+ARG VERSION
+ARG CHANNEL
+
+ENV IB_GATEWAY_VERSION=${VERSION}
+ENV IB_GATEWAY_RELEASE_CHANNEL=${CHANNEL}
 ENV IBC_VERSION=3.23.0
 
 # Prepare system
@@ -22,12 +21,12 @@ RUN apt-get install --no-install-recommends --yes \
 WORKDIR /tmp/setup
 
 # Install IB Gateway
-# Use this instead of "RUN curl .." to install a local file:
-#COPY ibgateway-standalone-linux-x64.sh .
-RUN wget https://download2.interactivebrokers.com/installers/ibgateway/stable-standalone/ibgateway-stable-standalone-linux-x64.sh
-RUN ls -l
-RUN chmod a+x ./ibgateway-stable-standalone-linux-x64.sh
-RUN ./ibgateway-stable-standalone-linux-x64.sh -q -dir /root/Jts/ibgateway/stable
+RUN wget -O ibgateway-installer.sh \
+  "https://github.com/sucsessyan/ib-gateway-docker/releases/download/ibgateway-${CHANNEL}%40${VERSION}/ibgateway-${VERSION}-standalone-linux-x64.sh"
+
+RUN chmod a+x ./ibgateway-installer.sh
+RUN ./ibgateway-installer.sh -q -dir /root/Jts/ibgateway/${VERSION}
+
 COPY ./config/ibgateway/jts.ini /root/Jts/jts.ini
 
 # Install IBC
@@ -42,12 +41,16 @@ COPY ./config/ibc/config.ini.tmpl /root/ibc/config.ini.tmpl
 COPY ./scripts /root/scripts
 
 #
-# Build Stage: build production image
+# Build Stage: production image
 #
 
 FROM ubuntu:24.10
 
-ENV IB_GATEWAY_VERSION=stable
+ARG VERSION
+ARG CHANNEL
+
+ENV IB_GATEWAY_VERSION=${VERSION}
+ENV IB_GATEWAY_RELEASE_CHANNEL=${CHANNEL}
 
 WORKDIR /root
 
@@ -70,11 +73,11 @@ RUN chmod a+x /root/scripts/*.sh
 COPY --from=builder /usr/local/i4j_jres/ /usr/local/i4j_jres
 
 # IBC env vars
-ENV TWS_MAJOR_VRSN ${IB_GATEWAY_VERSION}
-ENV TWS_PATH /root/Jts
-ENV IBC_PATH /root/ibc
-ENV IBC_INI /root/ibc/config.ini
-ENV TWOFA_TIMEOUT_ACTION exit
+ENV TWS_MAJOR_VRSN=${VERSION}
+ENV TWS_PATH=/root/Jts
+ENV IBC_PATH=/root/ibc
+ENV IBC_INI=/root/ibc/config.ini
+ENV TWOFA_TIMEOUT_ACTION=exit
 
 # Start run script
 CMD ["/root/scripts/run.sh"]

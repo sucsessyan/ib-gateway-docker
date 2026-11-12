@@ -5,6 +5,23 @@ on:
     - cron: "0 8 * * *"
 
   workflow_dispatch:
+    inputs:
+      channel:
+        description: "IB Gateway channel"
+        type: choice
+        options:
+          - stable
+          - latest
+        required: true
+      version:
+        description: "IB Gateway version to build (e.g. 10.50.1g)"
+        type: string
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
 
 defaults:
   run:
@@ -13,69 +30,105 @@ defaults:
 jobs:
   detect-release:
     runs-on: ubuntu-latest
+
     strategy:
       fail-fast: true
       matrix:
         channel: ["stable", "latest"]
+
     steps:
       - uses: actions/checkout@v3
+        with:
+          ref: master
 
-      - name: Get Latest Version
+      - name: Skip channel
+        if: ${{ github.event_name == 'workflow_dispatch' && matrix.channel != inputs.channel }}
+        run: exit 0
+
+      - name: Get Version
         id: version
         run: |
-          res=$(curl -s https://download2.interactivebrokers.com/installers/tws/${{ matrix.channel }}-standalone/version.json | sed 's/tws${{ matrix.channel }}_callback(//g;s/);//g')
-          build_version=$(jq -r '.buildVersion' <<< "$res")
-          #build_dateTime=$(jq -r '.buildDateTime' <<< "$res")
-          echo "build_version=$build_version" >> $GITHUB_OUTPUT
-          #echo "build_dateTime=$build_dateTime" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            build_version="${{ inputs.version }}"
+          else
+            res=$(curl -fsSL "https://download2.interactivebrokers.com/installers/tws/${{ matrix.channel }}-standalone/version.json" \
+              | sed 's/tws${{ matrix.channel }}_callback(//g;s/);//g')
+            build_version=$(jq -r '.buildVersion' <<< "$res")
+          fi
 
-      - name: Check if there is an update
-        id: check-update
+          echo "build_version=$build_version" >> "$GITHUB_OUTPUT"
+
+      - name: Check if Release exists
+        id: check-release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release list > /tmp/ibgateway-releases
-          if grep -qF '${{ steps.version.outputs.build_version }}' /tmp/ibgateway-releases
-          then
-            echo "has_update=false" >> $GITHUB_OUTPUT
+          release_tag="ibgateway-${{ matrix.channel }}@${{ steps.version.outputs.build_version }}"
+
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            echo "release_exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_update=true" >> $GITHUB_OUTPUT
+            echo "release_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Download
-        if: ${{ steps.check-update.outputs.has_update == 'true' }}
+      - name: Download IB Gateway installer
+        if: ${{ github.event_name == 'schedule' && steps.check-release.outputs.release_exists == 'false' }}
         run: |
-          download_url='https://download2.interactivebrokers.com/installers/ibgateway/${{ matrix.channel }}-standalone/ibgateway-${{ matrix.channel }}-standalone-linux-x64.sh'
-          dest='ibgateway-${{ steps.version.outputs.build_version }}-standalone-linux-x64.sh'
-          curl -sSL "$download_url" --output "$dest"
+          download_url="https://download2.interactivebrokers.com/installers/ibgateway/${{ matrix.channel }}-standalone/ibgateway-${{ matrix.channel }}-standalone-linux-x64.sh"
+          dest="ibgateway-${{ steps.version.outputs.build_version }}-standalone-linux-x64.sh"
+
+          curl -fsSL "$download_url" --output "$dest"
           sha256sum "$dest" > "${dest}.sha256"
 
-      - name: Create release
-        if: ${{ steps.check-update.outputs.has_update == 'true' }}
+      - name: Create Release
+        if: ${{ github.event_name == 'schedule' && steps.check-release.outputs.release_exists == 'false' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create 'ibgateway-${{ matrix.channel }}@${{ steps.version.outputs.build_version }}' \
             -t 'IB Gateway ${{ matrix.channel }} ${{ steps.version.outputs.build_version }}' \
             -n 'IB Gateway ${{ matrix.channel }} ${{ steps.version.outputs.build_version }} release files' \
-            ibgateway-*
+            ibgateway-*.sh ibgateway-*.sha256
 
-      - name: Update ${{ matrix.channel }}
-        if: ${{ steps.check-update.outputs.has_update == 'true' }}
+      - name: Verify Release exists
+        if: ${{ github.event_name == 'workflow_dispatch' && steps.check-release.outputs.release_exists == 'false' }}
+        run: |
+          echo "Release ibgateway-${{ matrix.channel }}@${{ steps.version.outputs.build_version }} does not exist."
+          echo "Manual build requires an existing GitHub Release with the installer."
+          exit 1
+
+      - name: Update Dockerfile
         run: ./update.sh ${{ matrix.channel }} ${{ steps.version.outputs.build_version }}
 
+      - name: Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: ${{ matrix.channel }}
+          push: true
+          tags: |
+            ghcr.io/sucsessyan/ib-gateway:${{ steps.version.outputs.build_version }}-${{ matrix.channel }}
+            ghcr.io/sucsessyan/ib-gateway:${{ matrix.channel }}
+
       - name: Create PR
-        if: ${{ steps.check-update.outputs.has_update == 'true' }}
+        if: ${{ github.event_name == 'schedule' && steps.check-release.outputs.release_exists == 'false' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          t_branch='update-${{ matrix.channel }}-to-${{ steps.version.outputs.build_version }}'
+          t_branch="update-${{ matrix.channel }}-to-${{ steps.version.outputs.build_version }}"
+
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git pull
-          git checkout -b "$t_branch" origin/master
-          git add '${{ matrix.channel }}'
-          git commit -m 'Update `${{ matrix.channel }}` to `${{ steps.version.outputs.build_version }}`'
+
+          git checkout -b "$t_branch"
+          git add "${{ matrix.channel }}"
+          git commit -m "Update ${{ matrix.channel }} to ${{ steps.version.outputs.build_version }}"
           git push --set-upstream origin "$t_branch"
 
           gh pr create --base master --fill
