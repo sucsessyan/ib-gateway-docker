@@ -27,8 +27,11 @@ RUN wget -O ibgateway-installer.sh \
 RUN chmod a+x ./ibgateway-installer.sh
 RUN ./ibgateway-installer.sh -q -dir /root/Jts/ibgateway/${VERSION}
 
-COPY ./config/ibgateway/jts.ini /root/Jts/jts.ini
-
+RUN echo "=== JAVA RUNTIMES ===" && \
+    find / -type f -name java 2>/dev/null && \
+    echo "=== JRE DIRECTORIES ===" && \
+    find / -type d \( -iname '*jre*' -o -iname '*jdk*' -o -iname '*i4j*' \) 2>/dev/null
+    
 # Install IBC
 RUN wget https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip
 RUN mkdir /root/ibc
