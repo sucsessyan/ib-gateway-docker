@@ -18,18 +18,18 @@ RUN apt-get install --no-install-recommends --yes wget ca-certificates unzip
 WORKDIR /tmp/setup
 
 # Install IB Gateway
-RUN wget -O ibgateway-installer.sh 
-  "https://github.com/sucsessyan/ib-gateway-docker/releases/download/ibgateway-${CHANNEL}%40${VERSION}/ibgateway-${VERSION}-standalone-linux-x64.sh"
+RUN wget -O ibgateway-installer.sh \
+    "https://github.com/sucsessyan/ib-gateway-docker/releases/download/ibgateway-${CHANNEL}%40${VERSION}/ibgateway-${VERSION}-standalone-linux-x64.sh"
 
 RUN chmod a+x ./ibgateway-installer.sh
 RUN ./ibgateway-installer.sh -q -dir /root/Jts/ibgateway/${VERSION}
 
 # Verify Java Runtime
-RUN test -x "/root/Jts/ibgateway/${VERSION}/jre/bin/java" 
-  || (echo "IB Gateway Java runtime not found" && exit 1)
+RUN test -x "/root/Jts/ibgateway/${VERSION}/jre/bin/java" \
+    || (echo "IB Gateway Java runtime not found" && exit 1)
 
 # Install IBC
-RUN wget https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip
+RUN wget "https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip"
 RUN mkdir /root/ibc
 RUN unzip ./IBCLinux-${IBC_VERSION}.zip -d /root/ibc
 RUN chmod -R u+x /root/ibc/*.sh
@@ -55,16 +55,16 @@ WORKDIR /root
 
 # Prepare system
 RUN apt-get update -y
-RUN apt-get install --no-install-recommends --yes 
-  gettext 
-  xvfb 
-  libxslt-dev 
-  libxrender1 
-  libxtst6 
-  libxi6 
-  libgtk2.0-bin 
-  socat 
-  x11vnc
+RUN apt-get install --no-install-recommends --yes \
+    gettext \
+    xvfb \
+    libxslt-dev \
+    libxrender1 \
+    libxtst6 \
+    libxi6 \
+    libgtk2.0-bin \
+    socat \
+    x11vnc
 
 # Copy files
 COPY --from=builder /root/ .
