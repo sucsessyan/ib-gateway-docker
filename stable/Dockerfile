@@ -31,6 +31,12 @@ RUN ./ibgateway-installer.sh -q -dir /root/Jts/ibgateway/${VERSION}
 RUN test -x "/root/Jts/ibgateway/${VERSION}/jre/bin/java" \
     || (echo "IB Gateway Java runtime not found" && exit 1)
 
+# Fix Java runtime path for IBC
+RUN for config in inst_jre.cfg pref_jre.cfg; do \
+    printf '%s\n' "/root/Jts/ibgateway/${VERSION}/jre" \
+        > "/root/Jts/ibgateway/${VERSION}/.install4j/${config}"; \
+    done
+
 # Install IBC
 RUN wget "https://github.com/IbcAlpha/IBC/releases/download/${IBC_VERSION}/IBCLinux-${IBC_VERSION}.zip"
 RUN mkdir /root/ibc
